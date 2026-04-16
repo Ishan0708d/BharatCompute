@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import ReactECharts from "echarts-for-react"
-import { fetchNodes, fetchJobs } from "../api"
+import { io } from "socket.io-client"
 
 export default function Dashboard() {
   const [nodes, setNodes] = useState<any[]>([])
@@ -8,45 +8,19 @@ export default function Dashboard() {
   const [time, setTime] = useState<string[]>(Array(20).fill("").map((_, i) => `${i}s`))
 
   useEffect(() => {
-    async function updateDashboard() {
-      const [nodesData, jobsData] = await Promise.all([fetchNodes(), fetchJobs()])
-      if (!nodesData?.length) return
+    const socket = io("http://localhost:4000")
 
-      const enrichedNodes = nodesData.map((node: any) => {
-        if (node.status === "offline") {
-           return { name: node.name, status: "offline", gpu: 0, memory: 0, temp: 0, power: 0 }
-        }
-
-        const nodeJobs = jobsData.filter((j: any) => j.nodeId === node.id)
-        const usedGpus = nodeJobs.reduce((sum: number, j: any) => sum + j.gpus, 0)
-        let gpuPercent = Math.round((usedGpus / node.totalGpus) * 100)
-        if (gpuPercent > 100) gpuPercent = 100
-
-        // Fluctuate telemetry slightly if being used, otherwise baseline idle stats
-        const isIdle = gpuPercent === 0
-        const randomBetween = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min
-
-        return {
-          name: node.name,
-          status: "online",
-          gpu: gpuPercent,
-          memory: isIdle ? randomBetween(5, 10) : randomBetween(40, 80),
-          temp: isIdle ? randomBetween(35, 45) : randomBetween(65, 85),
-          power: isIdle ? randomBetween(30, 50) : randomBetween(200, 350)
-        }
-      })
-
+    socket.on("telemetry_update", (enrichedNodes: any[]) => {
       setNodes(enrichedNodes)
       
       const avgGpu = Math.floor(enrichedNodes.reduce((a: number, n: any) => a + n.gpu, 0) / enrichedNodes.length)
       setHistory(prev => [...prev.slice(1), avgGpu])
       setTime(prev => [...prev.slice(1), `${new Date().getSeconds()}s`])
+    })
+
+    return () => {
+      socket.disconnect()
     }
-
-    updateDashboard()
-    const interval = setInterval(updateDashboard, 1500)
-
-    return () => clearInterval(interval)
   }, [])
 
   const avgGpu = nodes.length ? Math.floor(nodes.reduce((a, n) => a + n.gpu, 0) / nodes.length) : 0
