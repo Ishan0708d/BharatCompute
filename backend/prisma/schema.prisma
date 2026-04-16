@@ -1,0 +1,48 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Node {
+  id          String  @id @default(uuid())
+  name        String  @unique
+  type        String
+  totalGpus   Int
+  usedGpus    Int
+  temperature Float
+  power       Float
+  status      String
+
+  jobs        Job[]
+}
+
+model Job {
+  id          String   @id @default(uuid())
+  name        String
+  framework   String
+  gpus        Int
+  nodeId      String?
+  datasetId   String?
+  status      String
+  submittedAt DateTime @default(now())
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  node        Node?           @relation(fields: [nodeId], references: [id])
+  dataset     UploadSession?  @relation(fields: [datasetId], references: [id])
+}
+
+model UploadSession {
+  id        String   @id @default(uuid())
+  filename  String
+  sizeBytes Int
+  progress  Int
+  status    String
+  createdAt DateTime @default(now())
+  
+  jobs      Job[]
+}

@@ -1,4 +1,5 @@
 import { useState, useRef } from "react"
+import { initiateUpload, uploadFileData } from "../api"
 
 type UploadFile = {
   id: string
@@ -19,41 +20,39 @@ export default function Uploads() {
   const [draggingOver, setDraggingOver] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  function simulateUpload(file: File) {
-    const newFile: UploadFile = {
-      id: crypto.randomUUID(),
-      name: file.name,
-      size: file.size,
-      progress: 0,
-      status: "uploading",
-    }
+  async function startUpload(file: File) {
+    try {
+      const session = await initiateUpload(file.name, file.size)
 
-    setFiles(prev => [...prev, newFile])
-
-    let progress = 0
-    const interval = setInterval(() => {
-      progress += randomBetween(5, 15)
-      if (progress >= 100) {
-        progress = 100
-        clearInterval(interval)
-        setFiles(prev =>
-          prev.map(f => f.id === newFile.id ? { ...f, progress: 100, status: "done" } : f)
-        )
-      } else {
-        setFiles(prev =>
-          prev.map(f => f.id === newFile.id ? { ...f, progress } : f)
-        )
+      const newFile: UploadFile = {
+        id: session.id,
+        name: file.name,
+        size: file.size,
+        progress: 0,
+        status: "uploading",
       }
-    }, 300)
-  }
 
-  function randomBetween(min: number, max: number) {
-    return Math.floor(Math.random() * (max - min + 1)) + min
+      setFiles(prev => [...prev, newFile])
+
+      await uploadFileData(session.id, file, (progress) => {
+        setFiles(prev =>
+          prev.map(f => f.id === session.id ? { ...f, progress } : f)
+        )
+      })
+
+      setFiles(prev =>
+        prev.map(f => f.id === session.id ? { ...f, progress: 100, status: "done" } : f)
+      )
+    } catch (error) {
+      setFiles(prev => 
+        prev.map(f => f.name === file.name && f.status === "uploading" ? { ...f, status: "error" } : f)
+      )
+    }
   }
 
   function handleFiles(incoming: FileList | null) {
     if (!incoming) return
-    Array.from(incoming).forEach(simulateUpload)
+    Array.from(incoming).forEach(startUpload)
   }
 
   function handleDrop(e: React.DragEvent) {

@@ -10,8 +10,15 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
-      <header className="bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center gap-8">
-        <h1 className="text-xl font-bold text-blue-400">⚡ BharatCompute</h1>
+      <header className="bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between">
+      <div className="flex items-center gap-8">
+        <h1 className="text-xl font-bold text-blue-400 flex items-center gap-2">
+          ⚡ BharatCompute
+          <span className="flex items-center gap-1 text-xs font-normal text-green-400 bg-green-900/50 px-2 py-0.5 rounded-full">
+            <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse inline-block" />
+            Live
+          </span>
+        </h1>
         <nav className="flex gap-4">
           {tabs.map(tab => (
             <button
@@ -27,6 +34,10 @@ export default function App() {
             </button>
           ))}
         </nav>
+      </div>
+      <div className="text-xs text-gray-500">
+        🇮🇳 India National GPU Grid &nbsp;·&nbsp; 34,000+ Nodes
+      </div>
       </header>
 
       <main className="p-6">

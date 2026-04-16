@@ -1,42 +1,69 @@
 import { Request, Response } from "express"
-import { jobs, Job } from "../data/mockData"
-import { v4 as uuidv4 } from "uuid"
+import { prisma } from "../data/db"
 
-export function getJobs(_req: Request, res: Response) {
-  res.json(jobs)
+export async function getJobs(_req: Request, res: Response) {
+  try {
+    const jobs = await prisma.job.findMany()
+    res.json(jobs)
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch jobs" })
+  }
 }
 
-export function getJobById(req: Request, res: Response) {
-  const job = jobs.find(j => j.id === req.params.id)
-  if (!job) return res.status(404).json({ error: "Job not found" })
-  res.json(job)
+export async function getJobById(req: Request, res: Response) {
+  try {
+    const job = await prisma.job.findUnique({
+      where: { id: req.params.id as string },
+    })
+    if (!job) return res.status(404).json({ error: "Job not found" })
+    res.json(job)
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch job" })
+  }
 }
 
-export function createJob(req: Request, res: Response) {
-  const { name, framework, gpus, nodeId } = req.body
+export async function createJob(req: Request, res: Response) {
+  const { name, framework, gpus, nodeId, datasetId } = req.body
   if (!name || !framework || !gpus) {
     return res.status(400).json({ error: "name, framework and gpus are required" })
   }
 
-  const newJob: Job = {
-    id: uuidv4(),
-    name,
-    framework,
-    gpus,
-    nodeId: nodeId || null,
-    status: "pending",
-    submittedAt: new Date().toISOString(),
-    startedAt: null,
-    completedAt: null,
+  try {
+    const newJob = await prisma.job.create({
+      data: {
+        name,
+        framework,
+        gpus,
+        nodeId: nodeId || null,
+        datasetId: datasetId || null,
+        status: "pending",
+      },
+    })
+    res.status(201).json(newJob)
+  } catch (error) {
+    res.status(500).json({ error: "Failed to create job" })
   }
-
-  jobs.push(newJob)
-  res.status(201).json(newJob)
 }
 
-export function deleteJob(req: Request, res: Response) {
-  const index = jobs.findIndex(j => j.id === req.params.id)
-  if (index === -1) return res.status(404).json({ error: "Job not found" })
-  jobs.splice(index, 1)
-  res.json({ message: "Job cancelled" })
+export async function deleteJob(req: Request, res: Response) {
+  try {
+    await prisma.job.delete({
+      where: { id: req.params.id as string },
+    })
+    res.json({ message: "Job cancelled" })
+  } catch (error) {
+    res.status(404).json({ error: "Job not found or could not be deleted" })
+  }
+}
+
+export async function updateJob(req: Request, res: Response) {
+  try {
+    const job = await prisma.job.update({
+      where: { id: req.params.id as string },
+      data: req.body,
+    })
+    res.json(job)
+  } catch (error) {
+    res.status(400).json({ error: "Failed to update job" })
+  }
 }

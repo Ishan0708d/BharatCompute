@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import {
   DndContext,
   DragOverlay,
@@ -7,24 +7,43 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core"
+import { fetchJobs, fetchNodes, fetchUploads, createJob, deleteJob, updateJobNode } from "../api"
 
-const INITIAL_JOBS = [
-  { id: "job-1", name: "GPT-4 Finetune", framework: "PyTorch", gpus: 8, color: "bg-blue-600" },
-  { id: "job-2", name: "ResNet Training", framework: "TensorFlow", gpus: 4, color: "bg-purple-600" },
-  { id: "job-3", name: "BERT Pretraining", framework: "JAX", gpus: 16, color: "bg-pink-600" },
-  { id: "job-4", name: "Stable Diffusion", framework: "PyTorch", gpus: 8, color: "bg-orange-600" },
-]
+type UploadSession = {
+  id: string
+  filename: string
+  status: string
+}
 
-const NODES = [
-  { id: "node-1", name: "Node-001", type: "A100", totalGpus: 16 },
-  { id: "node-2", name: "Node-002", type: "A100", totalGpus: 16 },
-  { id: "node-3", name: "Node-003", type: "H100", totalGpus: 8 },
-  { id: "node-4", name: "Node-004", type: "H100", totalGpus: 8 },
-]
+type Job = {
+  id: string
+  name: string
+  framework: string
+  gpus: number
+  nodeId: string | null
+  status: string
+}
 
-type Job = typeof INITIAL_JOBS[0]
+type Node = {
+  id: string
+  name: string
+  type: string
+  totalGpus: number
+  usedGpus: number
+  status: string
+}
 
-function JobCard({ job, isDragging = false }: { job: Job; isDragging?: boolean }) {
+const JOB_COLORS: Record<string, string> = {
+  PyTorch: "bg-blue-600",
+  TensorFlow: "bg-orange-600",
+  JAX: "bg-purple-600",
+}
+
+function getColor(framework: string) {
+  return JOB_COLORS[framework] || "bg-gray-600"
+}
+
+function JobCard({ job }: { job: Job }) {
   const { attributes, listeners, setNodeRef, transform } = useDraggable({ id: job.id })
   const style = transform ? { transform: `translate(${transform.x}px, ${transform.y}px)` } : {}
 
@@ -34,7 +53,7 @@ function JobCard({ job, isDragging = false }: { job: Job; isDragging?: boolean }
       style={style}
       {...listeners}
       {...attributes}
-      className={`${job.color} ${isDragging ? "opacity-50" : ""} rounded-lg p-3 cursor-grab active:cursor-grabbing select-none shadow-lg`}
+      className={`${getColor(job.framework)} rounded-lg p-3 cursor-grab active:cursor-grabbing select-none shadow-lg`}
     >
       <p className="font-semibold text-white text-sm">{job.name}</p>
       <p className="text-white/70 text-xs mt-1">{job.framework} · {job.gpus} GPUs</p>
@@ -42,7 +61,7 @@ function JobCard({ job, isDragging = false }: { job: Job; isDragging?: boolean }
   )
 }
 
-function NodeSlot({ node, assignedJobs }: { node: typeof NODES[0]; assignedJobs: Job[] }) {
+function NodeSlot({ node, assignedJobs }: { node: Node; assignedJobs: Job[] }) {
   const { setNodeRef, isOver } = useDroppable({ id: node.id })
   const usedGpus = assignedJobs.reduce((a, j) => a + j.gpus, 0)
   const usagePercent = Math.round((usedGpus / node.totalGpus) * 100)
@@ -68,7 +87,6 @@ function NodeSlot({ node, assignedJobs }: { node: typeof NODES[0]; assignedJobs:
         </span>
       </div>
 
-      {/* Usage Bar */}
       <div className="w-full bg-gray-800 rounded-full h-1.5 mb-3">
         <div
           className={`h-1.5 rounded-full transition-all ${
@@ -78,13 +96,12 @@ function NodeSlot({ node, assignedJobs }: { node: typeof NODES[0]; assignedJobs:
         />
       </div>
 
-      {/* Assigned Jobs */}
       <div className="space-y-2">
         {assignedJobs.length === 0 && (
           <p className="text-gray-600 text-xs text-center py-4">Drop a job here</p>
         )}
         {assignedJobs.map(job => (
-          <div key={job.id} className={`${job.color} rounded-lg p-2`}>
+          <div key={job.id} className={`${getColor(job.framework)} rounded-lg p-2`}>
             <p className="text-white text-xs font-semibold">{job.name}</p>
             <p className="text-white/70 text-xs">{job.framework} · {job.gpus} GPUs</p>
           </div>
@@ -95,31 +112,69 @@ function NodeSlot({ node, assignedJobs }: { node: typeof NODES[0]; assignedJobs:
 }
 
 export default function JobCanvas() {
-  const [jobs, setJobs] = useState(INITIAL_JOBS)
+  const [jobs, setJobs] = useState<Job[]>([])
+  const [nodes, setNodes] = useState<Node[]>([])
+  const [datasets, setDatasets] = useState<UploadSession[]>([])
   const [assignments, setAssignments] = useState<Record<string, string>>({})
   const [activeJob, setActiveJob] = useState<Job | null>(null)
+  const [showForm, setShowForm] = useState(false)
+  const [form, setForm] = useState({ name: "", framework: "PyTorch", gpus: "4", datasetId: "" })
+
+  useEffect(() => {
+    fetchJobs().then(data => {
+      setJobs(data)
+      const initialAssignments: Record<string, string> = {}
+      data.forEach((job: Job) => {
+        if (job.nodeId) initialAssignments[job.id] = job.nodeId
+      })
+      setAssignments(initialAssignments)
+    })
+    fetchNodes().then(setNodes)
+    fetchUploads().then((data: UploadSession[]) => setDatasets(data.filter(d => d.status === "completed")))
+  }, [])
 
   function handleDragStart(event: DragStartEvent) {
     const job = jobs.find(j => j.id === event.active.id)
     if (job) setActiveJob(job)
   }
 
-  function handleDragEnd(event: DragEndEvent) {
+  async function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event
     setActiveJob(null)
     if (!over) return
+    const jobId = active.id as string
+    const targetNodeId = over.id as string
+    setAssignments(prev => ({ ...prev, [jobId]: targetNodeId }))
+    await updateJobNode(jobId, targetNodeId)
+  }
 
-    setAssignments(prev => ({ ...prev, [active.id as string]: over.id as string }))
+  async function handleCreateJob() {
+    if (!form.name) return
+    const newJob = await createJob({
+      name: form.name,
+      framework: form.framework,
+      gpus: parseInt(form.gpus),
+      datasetId: form.datasetId || undefined,
+    })
+    setJobs(prev => [...prev, newJob])
+    setForm({ name: "", framework: "PyTorch", gpus: "4", datasetId: "" })
+    setShowForm(false)
+  }
+
+  async function handleDeleteJob(id: string) {
+    await deleteJob(id)
+    setJobs(prev => prev.filter(j => j.id !== id))
+    setAssignments(prev => {
+      const copy = { ...prev }
+      delete copy[id]
+      return copy
+    })
   }
 
   const unassignedJobs = jobs.filter(j => !assignments[j.id])
 
   function getJobsForNode(nodeId: string) {
     return jobs.filter(j => assignments[j.id] === nodeId)
-  }
-
-  function handleReset() {
-    setAssignments({})
   }
 
   return (
@@ -130,13 +185,79 @@ export default function JobCanvas() {
             <h2 className="text-xl font-bold text-white">Job Canvas</h2>
             <p className="text-gray-400 text-sm mt-1">Drag training jobs onto GPU nodes to assign them</p>
           </div>
-          <button
-            onClick={handleReset}
-            className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-sm transition-colors"
-          >
-            Reset All
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowForm(v => !v)}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm transition-colors"
+            >
+              + New Job
+            </button>
+            <button
+              onClick={async () => {
+                setAssignments({})
+                await Promise.all(jobs.filter(j => assignments[j.id]).map(j => updateJobNode(j.id, null)))
+              }}
+              className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-sm transition-colors"
+            >
+              Reset All
+            </button>
+          </div>
         </div>
+
+        {/* New Job Form */}
+        {showForm && (
+          <div className="bg-gray-900 border border-gray-700 rounded-xl p-4 flex gap-4 items-end">
+            <div className="flex-1">
+              <label className="text-gray-400 text-xs mb-1 block">Job Name</label>
+              <input
+                className="w-full bg-gray-800 text-white rounded-lg px-3 py-2 text-sm border border-gray-700 focus:outline-none focus:border-blue-500"
+                placeholder="e.g. LLaMA Finetune"
+                value={form.name}
+                onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="text-gray-400 text-xs mb-1 block">Framework</label>
+              <select
+                className="bg-gray-800 text-white rounded-lg px-3 py-2 text-sm border border-gray-700 focus:outline-none"
+                value={form.framework}
+                onChange={e => setForm(p => ({ ...p, framework: e.target.value }))}
+              >
+                <option>PyTorch</option>
+                <option>TensorFlow</option>
+                <option>JAX</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-gray-400 text-xs mb-1 block">GPUs</label>
+              <input
+                type="number"
+                className="w-20 bg-gray-800 text-white rounded-lg px-3 py-2 text-sm border border-gray-700 focus:outline-none"
+                value={form.gpus}
+                onChange={e => setForm(p => ({ ...p, gpus: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="text-gray-400 text-xs mb-1 block">Target Dataset</label>
+              <select
+                className="w-48 bg-gray-800 text-white rounded-lg px-3 py-2 text-sm border border-gray-700 focus:outline-none"
+                value={form.datasetId}
+                onChange={e => setForm(p => ({ ...p, datasetId: e.target.value }))}
+              >
+                <option value="">None (Standalone)</option>
+                {datasets.map(d => (
+                  <option key={d.id} value={d.id}>{d.filename}</option>
+                ))}
+              </select>
+            </div>
+            <button
+              onClick={handleCreateJob}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm"
+            >
+              Submit
+            </button>
+          </div>
+        )}
 
         {/* Unassigned Jobs */}
         <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
@@ -148,14 +269,22 @@ export default function JobCanvas() {
               <p className="text-gray-600 text-sm">All jobs have been assigned 🎉</p>
             )}
             {unassignedJobs.map(job => (
-              <JobCard key={job.id} job={job} />
+              <div key={job.id} className="relative group">
+                <JobCard job={job} />
+                <button
+                  onClick={() => handleDeleteJob(job.id)}
+                  className="absolute -top-1 -right-1 bg-red-600 text-white rounded-full w-4 h-4 text-xs items-center justify-center hidden group-hover:flex"
+                >
+                  ×
+                </button>
+              </div>
             ))}
           </div>
         </div>
 
         {/* Node Grid */}
         <div className="grid grid-cols-2 gap-4">
-          {NODES.map(node => (
+          {nodes.map(node => (
             <NodeSlot key={node.id} node={node} assignedJobs={getJobsForNode(node.id)} />
           ))}
         </div>
@@ -163,7 +292,7 @@ export default function JobCanvas() {
 
       <DragOverlay>
         {activeJob && (
-          <div className={`${activeJob.color} rounded-lg p-3 shadow-2xl opacity-90`}>
+          <div className={`${getColor(activeJob.framework)} rounded-lg p-3 shadow-2xl opacity-90`}>
             <p className="font-semibold text-white text-sm">{activeJob.name}</p>
             <p className="text-white/70 text-xs mt-1">{activeJob.framework} · {activeJob.gpus} GPUs</p>
           </div>

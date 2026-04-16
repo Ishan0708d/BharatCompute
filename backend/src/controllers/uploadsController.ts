@@ -1,34 +1,68 @@
 import { Request, Response } from "express"
-import { uploadSessions, UploadSession } from "../data/mockData"
-import { v4 as uuidv4 } from "uuid"
+import { prisma } from "../data/db"
 
-export function getSessions(_req: Request, res: Response) {
-  res.json(uploadSessions)
+export async function getSessions(_req: Request, res: Response) {
+  try {
+    const sessions = await prisma.uploadSession.findMany()
+    res.json(sessions)
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch upload sessions" })
+  }
 }
 
-export function initiateUpload(req: Request, res: Response) {
+export async function initiateUpload(req: Request, res: Response) {
   const { filename, sizeBytes } = req.body
   if (!filename || !sizeBytes) {
     return res.status(400).json({ error: "filename and sizeBytes are required" })
   }
 
-  const session: UploadSession = {
-    id: uuidv4(),
-    filename,
-    sizeBytes,
-    progress: 0,
-    status: "in_progress",
-    createdAt: new Date().toISOString(),
+  try {
+    const session = await prisma.uploadSession.create({
+      data: {
+        filename,
+        sizeBytes,
+        progress: 0,
+        status: "in_progress",
+      },
+    })
+    res.status(201).json(session)
+  } catch (error) {
+    res.status(500).json({ error: "Failed to initiate upload" })
   }
-
-  uploadSessions.push(session)
-  res.status(201).json(session)
 }
 
-export function completeUpload(req: Request, res: Response) {
-  const session = uploadSessions.find(s => s.id === req.params.id)
-  if (!session) return res.status(404).json({ error: "Upload session not found" })
-  session.progress = 100
-  session.status = "completed"
-  res.json(session)
+export async function completeUpload(req: Request, res: Response) {
+  try {
+    const session = await prisma.uploadSession.update({
+      where: { id: req.params.id as string },
+      data: {
+        progress: 100,
+        status: "completed",
+      },
+    })
+    res.json(session)
+  } catch (error) {
+    res.status(404).json({ error: "Upload session not found" })
+  }
+}
+
+export async function uploadData(req: Request, res: Response) {
+  try {
+    const id = req.params.id as string
+    if (!req.file) {
+      return res.status(400).json({ error: "No file uploaded" })
+    }
+    
+    const session = await prisma.uploadSession.update({
+      where: { id },
+      data: {
+        progress: 100,
+        status: "completed",
+      },
+    })
+    
+    res.json(session)
+  } catch (error) {
+    res.status(500).json({ error: "Failed to process upload" })
+  }
 }

@@ -1,41 +1,59 @@
 import { useEffect, useState } from "react"
 import ReactECharts from "echarts-for-react"
-
-const NODES = ["Node-001", "Node-002", "Node-003", "Node-004", "Node-005", "Node-006"]
-
-function randomBetween(min: number, max: number) {
-  return Math.floor(Math.random() * (max - min + 1)) + min
-}
-
-function generateNodeData() {
-  return NODES.map(name => ({
-    name,
-    gpu: randomBetween(40, 99),
-    memory: randomBetween(30, 95),
-    temp: randomBetween(55, 85),
-    power: randomBetween(200, 400),
-    status: Math.random() > 0.15 ? "online" : "offline"
-  }))
-}
+import { fetchNodes, fetchJobs } from "../api"
 
 export default function Dashboard() {
-  const [nodes, setNodes] = useState(generateNodeData())
-  const [history, setHistory] = useState<number[]>(Array(20).fill(0).map(() => randomBetween(40, 90)))
+  const [nodes, setNodes] = useState<any[]>([])
+  const [history, setHistory] = useState<number[]>(Array(20).fill(0))
   const [time, setTime] = useState<string[]>(Array(20).fill("").map((_, i) => `${i}s`))
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setNodes(generateNodeData())
-      setHistory(prev => [...prev.slice(1), randomBetween(40, 90)])
-      setTime(prev => [...prev.slice(1), `${Date.now() % 10000}ms`])
-    }, 1500)
+    async function updateDashboard() {
+      const [nodesData, jobsData] = await Promise.all([fetchNodes(), fetchJobs()])
+      if (!nodesData?.length) return
+
+      const enrichedNodes = nodesData.map((node: any) => {
+        if (node.status === "offline") {
+           return { name: node.name, status: "offline", gpu: 0, memory: 0, temp: 0, power: 0 }
+        }
+
+        const nodeJobs = jobsData.filter((j: any) => j.nodeId === node.id)
+        const usedGpus = nodeJobs.reduce((sum: number, j: any) => sum + j.gpus, 0)
+        let gpuPercent = Math.round((usedGpus / node.totalGpus) * 100)
+        if (gpuPercent > 100) gpuPercent = 100
+
+        // Fluctuate telemetry slightly if being used, otherwise baseline idle stats
+        const isIdle = gpuPercent === 0
+        const randomBetween = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min
+
+        return {
+          name: node.name,
+          status: "online",
+          gpu: gpuPercent,
+          memory: isIdle ? randomBetween(5, 10) : randomBetween(40, 80),
+          temp: isIdle ? randomBetween(35, 45) : randomBetween(65, 85),
+          power: isIdle ? randomBetween(30, 50) : randomBetween(200, 350)
+        }
+      })
+
+      setNodes(enrichedNodes)
+      
+      const avgGpu = Math.floor(enrichedNodes.reduce((a: number, n: any) => a + n.gpu, 0) / enrichedNodes.length)
+      setHistory(prev => [...prev.slice(1), avgGpu])
+      setTime(prev => [...prev.slice(1), `${new Date().getSeconds()}s`])
+    }
+
+    updateDashboard()
+    const interval = setInterval(updateDashboard, 1500)
+
     return () => clearInterval(interval)
   }, [])
 
-  const avgGpu = Math.floor(nodes.reduce((a, n) => a + n.gpu, 0) / nodes.length)
-  const avgTemp = Math.floor(nodes.reduce((a, n) => a + n.temp, 0) / nodes.length)
+  const avgGpu = nodes.length ? Math.floor(nodes.reduce((a, n) => a + n.gpu, 0) / nodes.length) : 0
+  const avgTemp = nodes.length ? Math.floor(nodes.reduce((a, n) => a + n.temp, 0) / nodes.length) : 0
   const totalPower = nodes.reduce((a, n) => a + n.power, 0)
   const onlineCount = nodes.filter(n => n.status === "online").length
+  const totalNodes = nodes.length
 
   const lineChartOption = {
     backgroundColor: "transparent",
@@ -75,7 +93,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-4 gap-4">
         {[
           { label: "Avg GPU Utilization", value: `${avgGpu}%`, color: "text-blue-400" },
-          { label: "Nodes Online", value: `${onlineCount} / ${NODES.length}`, color: "text-green-400" },
+          { label: "Nodes Online", value: `${onlineCount} / ${totalNodes}`, color: "text-green-400" },
           { label: "Avg Temperature", value: `${avgTemp}°C`, color: "text-yellow-400" },
           { label: "Total Power Draw", value: `${totalPower}W`, color: "text-purple-400" },
         ].map(card => (
