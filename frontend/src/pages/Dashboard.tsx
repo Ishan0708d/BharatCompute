@@ -8,7 +8,7 @@ export default function Dashboard() {
   const [time, setTime] = useState<string[]>(Array(20).fill("").map((_, i) => `${i}s`))
 
   useEffect(() => {
-    const socket = io("http://localhost:4000")
+    const socket = io(import.meta.env.VITE_SOCKET_URL || "http://localhost:4000")
 
     socket.on("telemetry_update", (enrichedNodes: any[]) => {
       setNodes(enrichedNodes)
