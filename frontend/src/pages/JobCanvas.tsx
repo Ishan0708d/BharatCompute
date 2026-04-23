@@ -144,6 +144,21 @@ export default function JobCanvas() {
     if (!over) return
     const jobId = active.id as string
     const targetNodeId = over.id as string
+
+    const job = jobs.find(j => j.id === jobId)
+    const node = nodes.find(n => n.id === targetNodeId)
+
+    if (job && node) {
+      const currentlyAssignedJobs = jobs.filter(j => assignments[j.id] === targetNodeId && j.id !== jobId)
+      const usedGpusBefore = currentlyAssignedJobs.reduce((a, j) => a + j.gpus, 0)
+      const usedGpusAfter = usedGpusBefore + job.gpus
+      const usagePercentAfter = Math.round((usedGpusAfter / node.totalGpus) * 100)
+
+      if (usagePercentAfter > 80) {
+        alert(`Warning: Adding this job will cause ${node.name} to run too hot! (${usagePercentAfter}% utilization)`)
+      }
+    }
+
     setAssignments(prev => ({ ...prev, [jobId]: targetNodeId }))
     await updateJobNode(jobId, targetNodeId)
   }
