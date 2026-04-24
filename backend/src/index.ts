@@ -7,6 +7,7 @@ import { Server } from "socket.io"
 import jobsRouter from "./routes/jobs"
 import nodesRouter from "./routes/nodes"
 import uploadsRouter from "./routes/uploads"
+import analyticsRouter from "./routes/analytics"
 import { startTelemetryBroadcaster } from "./telemetry"
 
 dotenv.config()
@@ -27,6 +28,7 @@ app.use(express.json())
 app.use("/api/jobs", jobsRouter)
 app.use("/api/nodes", nodesRouter)
 app.use("/api/uploads", uploadsRouter)
+app.use("/api/analytics", analyticsRouter)
 
 app.get("/api/health", (_, res) => {
   res.json({ status: "ok", service: "BharatCompute API", timestamp: new Date().toISOString() })

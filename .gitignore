@@ -15,3 +15,14 @@ dist/
 *.env
 *.pem
 kubeconfig
+
+# SQLite database — never commit the DB file itself.
+# Schema is tracked via Prisma migrations; data is recreated via `prisma migrate deploy` + seed.
+*.db
+*.db-journal
+
+# Uploaded dataset files — runtime data, not source code
+backend/uploads/
+
+# Local test / scratch files
+sample_dataset.csv

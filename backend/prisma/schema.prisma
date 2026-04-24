@@ -28,6 +28,7 @@ model Job {
   nodeId      String?
   datasetId   String?
   status      String
+  stage       String   @default("queued")
   submittedAt DateTime @default(now())
   startedAt   DateTime?
   completedAt DateTime?
@@ -45,4 +46,17 @@ model UploadSession {
   createdAt DateTime @default(now())
   
   jobs      Job[]
+}
+
+// Persists every telemetry broadcast as a time-series data point.
+// DSBDA concept: Data Warehousing, Time-Series Storage, Big Data ingestion pipeline.
+// Each row = one snapshot of a node's health at a specific moment in time.
+model TelemetrySnapshot {
+  id         String   @id @default(uuid())
+  nodeName   String
+  gpu        Int
+  memory     Int
+  temp       Float
+  power      Float
+  recordedAt DateTime @default(now())
 }

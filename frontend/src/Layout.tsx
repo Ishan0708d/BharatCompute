@@ -19,9 +19,10 @@ export default function Layout() {
           </h1>
           <nav className="flex gap-4">
             {[
-              { path: "/dashboard", label: "Dashboard" },
+            { path: "/dashboard", label: "Dashboard" },
               { path: "/jobs", label: "Job Canvas" },
-              { path: "/uploads", label: "Uploads" }
+              { path: "/uploads", label: "Uploads" },
+              { path: "/analytics", label: "Analytics" }
             ].map(tab => (
               <Link
                 key={tab.path}

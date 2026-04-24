@@ -6,6 +6,7 @@ import Layout from "./Layout"
 import Dashboard from "./pages/Dashboard"
 import JobCanvas from "./pages/JobCanvas"
 import Uploads from "./pages/Uploads"
+import Analytics from "./pages/Analytics"
 
 function AuthGuard({ children }: { children: ReactNode }) {
   const { currentUser, loading } = useAuth()
@@ -29,6 +30,7 @@ export default function App() {
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="jobs" element={<JobCanvas />} />
             <Route path="uploads" element={<Uploads />} />
+            <Route path="analytics" element={<Analytics />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

@@ -69,3 +69,41 @@ export async function updateJobNode(id: string, nodeId: string | null) {
   })
   return res.json()
 }
+
+// Update the pipeline stage of a job
+export async function updateJobStage(id: string, stage: string) {
+  const res = await fetch(`${BASE_URL}/jobs/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ stage }),
+  })
+  return res.json()
+}
+
+// Fetch descriptive analytics summary from the backend
+export async function fetchAnalyticsSummary() {
+  const res = await fetch(`${BASE_URL}/analytics/summary`)
+  return res.json()
+}
+
+// Fetch job duration prediction via linear regression model
+export async function predictDuration(gpus: number, datasetSizeMB: number) {
+  const res = await fetch(
+    `${BASE_URL}/analytics/predict?gpus=${gpus}&datasetSize=${datasetSizeMB}`
+  )
+  return res.json()
+}
+
+// Fetch historical telemetry for a node (time-series data from DB)
+export async function fetchTelemetryHistory(nodeName: string, minutes = 60) {
+  const res = await fetch(
+    `${BASE_URL}/analytics/telemetry-history?nodeName=${encodeURIComponent(nodeName)}&minutes=${minutes}`
+  )
+  return res.json()
+}
+
+// Fetch EDA report for an uploaded dataset (CSV profiling)
+export async function fetchDatasetEda(sessionId: string) {
+  const res = await fetch(`${BASE_URL}/analytics/eda/${sessionId}`)
+  return res.json()
+}
