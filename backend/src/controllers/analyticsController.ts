@@ -3,6 +3,7 @@ import { prisma } from "../data/db"
 import path from "path"
 import fs from "fs"
 import { parse } from "csv-parse/sync"
+import { UPLOAD_DIR } from "../middleware/upload"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/analytics/summary
@@ -304,12 +305,12 @@ export async function getDatasetEda(req: Request, res: Response) {
     }
 
     // Locate the file on disk — multer saves as `<timestamp>-<originalname>`
-    const uploadsDir = path.resolve("uploads")
-    if (!fs.existsSync(uploadsDir)) {
+    // UPLOAD_DIR is imported from the middleware so both always point to the same place.
+    if (!fs.existsSync(UPLOAD_DIR)) {
       return res.status(404).json({ error: "Uploads directory not found" })
     }
 
-    const files = fs.readdirSync(uploadsDir)
+    const files = fs.readdirSync(UPLOAD_DIR)
     const match = files.find(f => f.endsWith(`-${session.filename}`))
     if (!match) {
       return res.status(404).json({
@@ -327,7 +328,7 @@ export async function getDatasetEda(req: Request, res: Response) {
       })
     }
 
-    const filePath = path.join(uploadsDir, match)
+    const filePath = path.join(UPLOAD_DIR, match)
     const rawContent = fs.readFileSync(filePath, "utf-8")
 
     // Parse CSV → array of row objects
